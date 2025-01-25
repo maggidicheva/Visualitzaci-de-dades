@@ -1,0 +1,162 @@
+---
+title: "Visualització de dades - PRA2"
+author: "Maggi Dicheva Baeva"
+date: "2025-01-22"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+  word_document:
+    toc: true
+  pdf_document:
+    toc: true
+header-includes: \usepackage{dcolumn}
+lang: ca
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+```
+
+
+```{r}
+# Carreguem el fitxer
+
+data <- read.csv('data.csv', sep = ';')
+head(data)
+
+# Consultem el tipus de dades
+
+str(data)
+```
+
+
+```{r}
+data$approval_rate_1st_sem <- data$Curricular.units.1st.sem..approved. / data$Curricular.units.1st.sem..enrolled.
+data$approval_rate_2nd_sem <- data$Curricular.units.2nd.sem..approved. / data$Curricular.units.2nd.sem..enrolled.
+
+data$approval_rate_annual <- (data$approval_rate_1st_sem + data$approval_rate_2nd_sem) / 2
+```
+
+```{r}
+sums <- colSums(is.na(data))
+print(sums)
+```
+
+```{r}
+data <- na.omit(data)
+```
+
+```{r}
+library(ggplot2)
+
+reclassify_education <- function(education_level) {
+  if (education_level %in% c(1, 9, 10, 12, 14, 18, 19, 22, 26, 27, 29, 30, 38)) {
+    return("Educació Secundària")
+  } else if (education_level %in% c(2, 3, 4, 5, 6, 40, 41, 42, 43, 44)) {
+    return("Educació Superior")
+  } else if (education_level %in% c(39)) {
+    return("Cursos Tècnics i Professionals")
+  } else if (education_level %in% c(35, 36, 37, 34)) {
+    return("Desconegut o Sense Educació")
+  } else {
+    return("Educació Primària")
+  }
+}
+
+data$mother_education_reclassified <- sapply(data$Mother.s.qualification, reclassify_education)
+data$father_education_reclassified <- sapply(data$Father.s.qualification, reclassify_education)
+
+data$parent_education_simplified <- apply(data[, c("mother_education_reclassified", "father_education_reclassified")], 1, function(x) {
+  if ("Educació Superior" %in% x) {
+    "Com a mínim un dels dos amb educació superior"
+  } else if ("Educació Secundària" %in% x) {
+    "Com a mínim un amb educació secundària"
+  } else {
+    "Altres"
+  }
+})
+
+data$parent_education_simplified <- as.factor(data$parent_education_simplified)
+```
+
+```{r}
+variables_target <- c('parent_education_simplified', 'Educational.special.needs', 'International', 'approval_rate_1st_sem', 'approval_rate_2nd_sem', 'approval_rate_annual', 'Target')
+data_subset <- data[variables_target]
+
+head(data_subset)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data_subset, aes(x = as.factor(Target))) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Distribució dels resultats finals dels estudiants",
+       x = "",
+       y = "Nombre d'estudiants") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(data_subset, aes(x = parent_education_simplified, y = approval_rate_annual, fill = parent_education_simplified)) +
+  geom_boxplot() +
+  labs(title = "Relació entre context educatiu familiar i la ràtio d'aprovació",
+       x = "Educació dels pares",
+       y = "Ràtio d'aprovació") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+if (!require(corrplot)) {
+    install.packages("corrplot")
+    library(corrplot)
+}
+
+numeric_data <- data_subset[, c("approval_rate_1st_sem", "approval_rate_2nd_sem")]
+
+cor_matrix <- cor(numeric_data)
+
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", tl.srt = 45, addCoef.col = "black", number.cex = 0.7)
+```
+
+```{r}
+model <- lm(approval_rate_2nd_sem ~ approval_rate_1st_sem, data = data_subset)
+summary(model)
+```
+
+```{r}
+library(ggplot2)
+ggplot(data_subset, aes(x = approval_rate_1st_sem, y = approval_rate_2nd_sem)) +
+  geom_point(aes(color = factor(Target)), alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +
+  labs(title = "Relació entre els resultats del 1r i 2n semestre",
+       x = "1r semestre",
+       y = "2n semestre") +
+  theme_minimal()
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data_subset, aes(x = as.factor(Educational.special.needs), y = approval_rate_annual, fill = as.factor(Educational.special.needs))) +
+  geom_boxplot() +
+  labs(title = "Relació entre necessitats educatives especials i resultats acadèmics",
+       x = "Necessitats Educatives Especials (NEE)",
+       y = "Taxa aprovació curs") +
+  scale_fill_brewer(palette = "Set1")
+
+ggplot(data_subset, aes(x = as.factor(International), y = approval_rate_annual, fill = as.factor(International))) +
+  geom_boxplot() +
+  labs(title = "Relació entre ser estudiant internacional i resultats acadèmics",
+       x = "Estudiant internacional",
+       y = "Taxa aprovació curs") +
+  scale_fill_brewer(palette = "Set1")
+
+```
+
+
+
